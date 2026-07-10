@@ -57,6 +57,10 @@
         <h2>QR Code نظرسنجی</h2>
         <p style="color:var(--text-muted);font-size:0.9rem">این QR را چاپ کنید تا شرکت‌کنندگان به نظرسنجی دسترسی داشته باشند</p>
         <div id="qrcode"></div>
+        <div class="company-branding company-branding--qr">
+          <p class="company-label">هلدینگ پیشران انتخاب</p>
+          <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
+        </div>
         <p class="qr-url" id="survey-url"></p>
         <button id="download-qr" class="btn btn-secondary btn-sm" style="margin-top:1rem">دانلود QR Code</button>
       </div>
@@ -65,10 +69,16 @@
     </div>
   </div>
 
-  <footer>پنل مدیریت نظرسنجی</footer>
+  <footer class="site-footer">
+    <div class="company-branding company-branding--footer">
+      <p class="company-label">هلدینگ پیشران انتخاب</p>
+      <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
+    </div>
+  </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="js/qrcode.min.js"></script>
+  <script src="js/qr-helper.js"></script>
   <script src="config.js"></script>
   <script src="js/app.js"></script>
   <script>
@@ -195,25 +205,35 @@
       }
     });
 
-    function generateQR() {
-      const surveyUrl = new URL('index.html', window.location.href).href;
+    async function generateQR() {
+      const surveyUrl = getSurveyUrl();
       document.getElementById('survey-url').textContent = surveyUrl;
 
       const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = '';
-      const canvas = document.createElement('canvas');
-      qrContainer.appendChild(canvas);
+      await renderQRCode(qrContainer, surveyUrl, 220);
 
-      QRCode.toCanvas(canvas, surveyUrl, {
-        width: 220,
-        margin: 2,
-        color: { dark: '#1a2332', light: '#ffffff' },
-      });
+      document.getElementById('download-qr').onclick = async () => {
+        const dataUrl = getQRDataUrl(qrContainer);
+        if (!dataUrl) return;
 
-      document.getElementById('download-qr').onclick = () => {
         const link = document.createElement('a');
         link.download = 'survey-qrcode.png';
-        link.href = canvas.toDataURL('image/png');
+
+        if (dataUrl.startsWith('http')) {
+          try {
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            URL.revokeObjectURL(link.href);
+            return;
+          } catch {
+            window.open(dataUrl, '_blank');
+            return;
+          }
+        }
+
+        link.href = dataUrl;
         link.click();
       };
     }

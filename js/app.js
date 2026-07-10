@@ -21,26 +21,60 @@ function normalizePersianText(text) {
   ;
 }
 
+function extractWords(segment) {
+  return segment
+    .split(/[\s\-–—]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 2 && !PERSIAN_STOP_WORDS.has(w));
+}
+
 function tokenizeForWordCloud(texts) {
   const freq = {};
+  const MAX_PHRASE_WORDS = 6;
+
+  function bump(term, weight = 1) {
+    if (!term || term.length < 2) return;
+    freq[term] = (freq[term] || 0) + weight;
+  }
+
+  function addNgrams(words) {
+    for (let n = 2; n <= 3; n++) {
+      for (let i = 0; i <= words.length - n; i++) {
+        const slice = words.slice(i, i + n);
+        if (slice.every((w) => w.length >= 2)) {
+          bump(slice.join(' '), n === 3 ? 1.5 : 1.2);
+        }
+      }
+    }
+  }
 
   texts.forEach((text) => {
     if (!text) return;
-    const normalized = normalizePersianText(text);
-    const words = normalized
-      .split(/[\s،,؛;.!?؟\-–—()[\]{}«»"'"]+/)
-      .map((w) => w.trim())
-      .filter((w) => w.length >= 2 && !PERSIAN_STOP_WORDS.has(w));
+    const normalized = normalizePersianText(text.trim());
+    const segments = normalized
+      .split(/[\n،,؛;.!?؟]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-    words.forEach((word) => {
-      freq[word] = (freq[word] || 0) + 1;
+    segments.forEach((segment) => {
+      const words = extractWords(segment);
+      if (words.length === 0) return;
+
+      if (words.length === 1) {
+        bump(words[0]);
+      } else if (words.length <= MAX_PHRASE_WORDS) {
+        bump(words.join(' '), 2);
+      } else {
+        addNgrams(words);
+        words.forEach((w) => bump(w));
+      }
     });
   });
 
   return Object.entries(freq)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 150)
-    .map(([word, count]) => [word, count]);
+    .map(([term, count]) => [term, count]);
 }
 
 function showAlert(container, message, type = 'info') {

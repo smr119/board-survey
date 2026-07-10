@@ -33,7 +33,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-words">0</div>
-          <div class="stat-label">واژه یکتا</div>
+          <div class="stat-label">عبارت و واژه</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-questions">0</div>
@@ -56,7 +56,7 @@
       </div>
 
       <div class="card">
-        <h2>پرتکرارترین واژه‌ها</h2>
+        <h2>پرتکرارترین عبارات و واژه‌ها</h2>
         <div id="top-words"></div>
       </div>
 
@@ -67,7 +67,12 @@
     </div>
   </div>
 
-  <footer>داشبورد نظرسنجی</footer>
+  <footer class="site-footer">
+    <div class="company-branding company-branding--footer">
+      <p class="company-label">هلدینگ پیشران انتخاب</p>
+      <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
+    </div>
+  </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.js"></script>
@@ -138,8 +143,8 @@
 
         WordCloud(canvas, {
           list: wordList,
-          gridSize: 8,
-          weightFactor: (size) => Math.pow(size, 0.65) * 18,
+          gridSize: 6,
+          weightFactor: (size) => Math.pow(size, 0.65) * 16,
           fontFamily: 'Vazirmatn, Tahoma, sans-serif',
           color: () => COLORS[Math.floor(Math.random() * COLORS.length)],
           rotateRatio: 0.3,
