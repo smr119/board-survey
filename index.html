@@ -11,8 +11,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>نظرسنجی اهداف و استراتژی</h1>
-      <p>نظر شما درباره مهم‌ترین اهداف و راهبردهای دستیابی به آن‌ها</p>
+      <h1 id="survey-title">نظرسنجی اهداف و استراتژی</h1>
+      <p id="survey-subtitle">نظر شما درباره مهم‌ترین اهداف و راهبردهای دستیابی به آن‌ها</p>
       <nav class="nav-links">
         <a href="dashboard.html">داشبورد</a>
         <a href="admin.html">مدیریت</a>
@@ -39,6 +39,7 @@
   <footer class="site-footer">
     <div class="company-branding company-branding--footer">
       <p class="company-label">هلدینگ پیشران انتخاب</p>
+      <p class="company-subtitle">معاونت برنامه ریزی جامع</p>
       <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
     </div>
   </footer>
@@ -56,6 +57,9 @@
     async function init() {
       try {
         const client = getSupabaseClient();
+        const settings = await fetchSettings(client);
+        applySurveyHeader(settings);
+
         const questions = await fetchActiveQuestions(client);
 
         loading.classList.add('hidden');

@@ -36,6 +36,21 @@
     <!-- Admin Panel -->
     <div id="admin-panel" class="hidden">
       <div class="card">
+        <h2>تنظیمات صفحه نظرسنجی</h2>
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="setting-title">عنوان نظرسنجی</label>
+            <input type="text" id="setting-title" required placeholder="مثال: نظرسنجی آینده‌پژوهی">
+          </div>
+          <div class="form-group">
+            <label for="setting-subtitle">زیرعنوان</label>
+            <input type="text" id="setting-subtitle" required placeholder="مثال: نظر شما درباره روندهای آینده">
+          </div>
+          <button type="submit" class="btn btn-primary">ذخیره تنظیمات</button>
+        </form>
+      </div>
+
+      <div class="card">
         <h2>افزودن سوال جدید</h2>
         <form id="add-question-form">
           <div class="form-group">
@@ -53,12 +68,24 @@
         </div>
       </div>
 
+      <div class="card danger-zone">
+        <h2>مدیریت داده‌ها</h2>
+        <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1rem">
+          برای شروع نظرسنجی جدید می‌توانید پاسخ‌ها یا کل داده‌ها را پاک کنید.
+        </p>
+        <div class="admin-actions">
+          <button id="clear-responses-btn" class="btn btn-danger btn-sm">پاک کردن همه پاسخ‌ها</button>
+          <button id="clear-all-btn" class="btn btn-danger btn-sm">پاک کردن کامل (سوالات + پاسخ‌ها)</button>
+        </div>
+      </div>
+
       <div class="card qr-section">
         <h2>QR Code نظرسنجی</h2>
         <p style="color:var(--text-muted);font-size:0.9rem">این QR را چاپ کنید تا شرکت‌کنندگان به نظرسنجی دسترسی داشته باشند</p>
         <div id="qrcode"></div>
         <div class="company-branding company-branding--qr">
           <p class="company-label">هلدینگ پیشران انتخاب</p>
+          <p class="company-subtitle">معاونت برنامه ریزی جامع</p>
           <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
         </div>
         <p class="qr-url" id="survey-url"></p>
@@ -72,6 +99,7 @@
   <footer class="site-footer">
     <div class="company-branding company-branding--footer">
       <p class="company-label">هلدینگ پیشران انتخاب</p>
+      <p class="company-subtitle">معاونت برنامه ریزی جامع</p>
       <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
     </div>
   </footer>
@@ -95,6 +123,7 @@
     function showAdmin() {
       loginSection.classList.add('hidden');
       adminPanel.classList.remove('hidden');
+      loadSettings();
       loadQuestions();
       generateQR();
     }
@@ -127,6 +156,60 @@
     }
 
     if (isLoggedIn() && client) showAdmin();
+
+    async function loadSettings() {
+      if (!client) return;
+      try {
+        const settings = await fetchSettings(client);
+        document.getElementById('setting-title').value = settings.survey_title;
+        document.getElementById('setting-subtitle').value = settings.survey_subtitle;
+      } catch (err) {
+        showAlert(alertBox, 'خطا در بارگذاری تنظیمات: ' + err.message, 'error');
+      }
+    }
+
+    document.getElementById('settings-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!client) {
+        showAlert(alertBox, 'اتصال به دیتابیس برقرار نیست.', 'error');
+        return;
+      }
+
+      try {
+        await saveSettings(client, {
+          survey_title: document.getElementById('setting-title').value.trim(),
+          survey_subtitle: document.getElementById('setting-subtitle').value.trim(),
+        });
+        showAlert(alertBox, 'تنظیمات ذخیره شد.', 'success');
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
+
+    document.getElementById('clear-responses-btn').addEventListener('click', async () => {
+      if (!client) return;
+      if (!confirm('همه پاسخ‌ها حذف شوند؟ این کار قابل بازگشت نیست.')) return;
+
+      try {
+        await clearAllResponses(client);
+        showAlert(alertBox, 'همه پاسخ‌ها پاک شد.', 'success');
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
+
+    document.getElementById('clear-all-btn').addEventListener('click', async () => {
+      if (!client) return;
+      if (!confirm('همه سوالات و پاسخ‌ها حذف شوند؟ این کار قابل بازگشت نیست.')) return;
+
+      try {
+        await clearAllQuestions(client);
+        showAlert(alertBox, 'دیتابیس پاک شد.', 'success');
+        loadQuestions();
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
 
     async function loadQuestions() {
       if (!client) {

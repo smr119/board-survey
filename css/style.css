@@ -402,6 +402,38 @@ footer {
   color: var(--text-muted);
 }
 
+.company-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: -0.25rem;
+}
+
+.company-branding--qr .company-subtitle {
+  font-size: 0.8rem;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.danger-zone {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.danger-zone h2 {
+  color: var(--danger);
+}
+
+.export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
 @media (max-width: 600px) {
   header h1 {
     font-size: 1.4rem;

@@ -59,6 +59,7 @@ function createCompanyBranding(className = 'company-branding') {
   wrap.className = className;
   wrap.innerHTML = `
     <p class="company-label">${COMPANY_NAME}</p>
+    <p class="company-subtitle">معاونت برنامه ریزی جامع</p>
     <img src="${LOGO_PATH}" alt="${COMPANY_NAME}" class="company-logo" onerror="this.style.display='none'">
   `;
   return wrap;

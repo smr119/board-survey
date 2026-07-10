@@ -41,6 +41,13 @@
         </div>
       </div>
 
+      <div class="export-bar">
+        <button id="export-cloud-btn" class="btn btn-primary btn-sm">دانلود ابر واژگان (PNG)</button>
+        <button id="export-words-btn" class="btn btn-secondary btn-sm">دانلود لیست واژگان (CSV)</button>
+        <button id="export-results-btn" class="btn btn-secondary btn-sm">دانلود نتایج (CSV)</button>
+        <button id="export-json-btn" class="btn btn-secondary btn-sm">دانلود نتایج (JSON)</button>
+      </div>
+
       <div class="filter-bar">
         <label for="question-filter">فیلتر بر اساس سوال:</label>
         <select id="question-filter">
@@ -70,6 +77,7 @@
   <footer class="site-footer">
     <div class="company-branding company-branding--footer">
       <p class="company-label">هلدینگ پیشران انتخاب</p>
+      <p class="company-subtitle">معاونت برنامه ریزی جامع</p>
       <img src="assets/logo.png" alt="هلدینگ پیشران انتخاب" class="company-logo" onerror="this.style.display='none'">
     </div>
   </footer>
@@ -85,6 +93,7 @@
     const questionFilter = document.getElementById('question-filter');
     let allResponses = [];
     let allQuestions = [];
+    let currentWordList = [];
     let client;
 
     const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
@@ -123,6 +132,7 @@
       const responses = getFilteredResponses();
       const texts = responses.map((r) => r.answer);
       const wordList = tokenizeForWordCloud(texts);
+      currentWordList = wordList;
 
       document.getElementById('stat-responses').textContent = responses.length;
       document.getElementById('stat-words').textContent = wordList.length;
@@ -176,6 +186,45 @@
       allResponses = await fetchResponses(client);
       render();
       showAlert(alertBox, 'داده‌ها بروزرسانی شد.', 'success');
+    });
+
+    document.getElementById('export-cloud-btn').addEventListener('click', () => {
+      const canvas = document.getElementById('wordcloud-canvas');
+      if (canvas.classList.contains('hidden') || currentWordList.length === 0) {
+        showAlert(alertBox, 'ابری برای ذخیره وجود ندارد.', 'error');
+        return;
+      }
+      exportWordCloudPNG(canvas);
+      showAlert(alertBox, 'ابر واژگان ذخیره شد.', 'success');
+    });
+
+    document.getElementById('export-words-btn').addEventListener('click', () => {
+      if (currentWordList.length === 0) {
+        showAlert(alertBox, 'لیست واژگان خالی است.', 'error');
+        return;
+      }
+      exportWordListCSV(currentWordList);
+      showAlert(alertBox, 'لیست واژگان ذخیره شد.', 'success');
+    });
+
+    document.getElementById('export-results-btn').addEventListener('click', () => {
+      const responses = getFilteredResponses();
+      if (responses.length === 0) {
+        showAlert(alertBox, 'پاسخی برای ذخیره وجود ندارد.', 'error');
+        return;
+      }
+      exportResponsesCSV(responses);
+      showAlert(alertBox, 'نتایج ذخیره شد.', 'success');
+    });
+
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+      const responses = getFilteredResponses();
+      if (responses.length === 0) {
+        showAlert(alertBox, 'پاسخی برای ذخیره وجود ندارد.', 'error');
+        return;
+      }
+      exportResponsesJSON(responses);
+      showAlert(alertBox, 'فایل JSON ذخیره شد.', 'success');
     });
 
     init();
