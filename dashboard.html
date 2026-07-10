@@ -20,7 +20,19 @@
     </header>
 
     <div id="alert-box"></div>
-    <div id="loading" class="loading">
+
+    <div id="login-section" class="card">
+      <h2>ورود مدیر</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="password">رمز عبور</label>
+          <input type="password" id="password" required placeholder="رمز عبور را وارد کنید">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">ورود</button>
+      </form>
+    </div>
+
+    <div id="loading" class="loading hidden">
       <div class="spinner"></div>
       <p>در حال بارگذاری داده‌ها...</p>
     </div>
@@ -71,6 +83,8 @@
         <h2>آخرین پاسخ‌ها</h2>
         <div id="recent-responses"></div>
       </div>
+
+      <button id="logout-btn" class="btn btn-secondary" style="margin-top:1rem">خروج</button>
     </div>
   </div>
 
@@ -88,6 +102,7 @@
   <script src="js/app.js"></script>
   <script>
     const loading = document.getElementById('loading');
+    const loginSection = document.getElementById('login-section');
     const dashboard = document.getElementById('dashboard');
     const alertBox = document.getElementById('alert-box');
     const questionFilter = document.getElementById('question-filter');
@@ -98,7 +113,36 @@
 
     const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
 
+    function isLoggedIn() {
+      return sessionStorage.getItem('admin_logged_in') === 'true';
+    }
+
+    function showDashboard() {
+      loginSection.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      init();
+    }
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById('password').value;
+      if (pwd === window.APP_CONFIG.adminPassword) {
+        sessionStorage.setItem('admin_logged_in', 'true');
+        showDashboard();
+      } else {
+        showAlert(alertBox, 'رمز عبور اشتباه است.', 'error');
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      sessionStorage.removeItem('admin_logged_in');
+      dashboard.classList.add('hidden');
+      loginSection.classList.remove('hidden');
+      document.getElementById('password').value = '';
+    });
+
     async function init() {
+      loading.classList.remove('hidden');
       try {
         client = getSupabaseClient();
         allQuestions = await fetchActiveQuestions(client);
@@ -227,7 +271,7 @@
       showAlert(alertBox, 'فایل JSON ذخیره شد.', 'success');
     });
 
-    init();
+    if (isLoggedIn()) showDashboard();
   </script>
 </body>
 </html>
