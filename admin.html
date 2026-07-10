@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>پنل مدیریت سوالات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>پنل مدیریت</h1>
+      <p>ویرایش سوالات و تولید QR Code</p>
+      <nav class="nav-links">
+        <a href="index.html">نظرسنجی</a>
+        <a href="dashboard.html">داشبورد</a>
+      </nav>
+    </header>
+
+    <div id="alert-box"></div>
+
+    <!-- Login -->
+    <div id="login-section" class="card">
+      <h2>ورود مدیر</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="password">رمز عبور</label>
+          <input type="password" id="password" required placeholder="رمز عبور را وارد کنید">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">ورود</button>
+      </form>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="admin-panel" class="hidden">
+      <div class="card">
+        <h2>افزودن سوال جدید</h2>
+        <form id="add-question-form">
+          <div class="form-group">
+            <label for="new-question">متن سوال</label>
+            <input type="text" id="new-question" required placeholder="مثال: مهم‌ترین هدف سازمان شما چیست؟">
+          </div>
+          <button type="submit" class="btn btn-success">افزودن سوال</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>سوالات فعال</h2>
+        <div id="questions-list">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="card qr-section">
+        <h2>QR Code نظرسنجی</h2>
+        <p style="color:var(--text-muted);font-size:0.9rem">این QR را چاپ کنید تا شرکت‌کنندگان به نظرسنجی دسترسی داشته باشند</p>
+        <div id="qrcode"></div>
+        <p class="qr-url" id="survey-url"></p>
+        <button id="download-qr" class="btn btn-secondary btn-sm" style="margin-top:1rem">دانلود QR Code</button>
+      </div>
+
+      <button id="logout-btn" class="btn btn-secondary" style="margin-top:1rem">خروج</button>
+    </div>
+  </div>
+
+  <footer>پنل مدیریت نظرسنجی</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const loginSection = document.getElementById('login-section');
+    const adminPanel = document.getElementById('admin-panel');
+    const alertBox = document.getElementById('alert-box');
+    const questionsList = document.getElementById('questions-list');
+    let client;
+
+    function isLoggedIn() {
+      return sessionStorage.getItem('admin_logged_in') === 'true';
+    }
+
+    function showAdmin() {
+      loginSection.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+      loadQuestions();
+      generateQR();
+    }
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById('password').value;
+      if (pwd === window.APP_CONFIG.adminPassword) {
+        sessionStorage.setItem('admin_logged_in', 'true');
+        showAdmin();
+      } else {
+        showAlert(alertBox, 'رمز عبور اشتباه است.', 'error');
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      sessionStorage.removeItem('admin_logged_in');
+      adminPanel.classList.add('hidden');
+      loginSection.classList.remove('hidden');
+    });
+
+    if (isLoggedIn()) showAdmin();
+
+    try {
+      client = getSupabaseClient();
+    } catch (err) {
+      showAlert(alertBox, err.message, 'error');
+    }
+
+    async function loadQuestions() {
+      try {
+        const questions = await fetchAllQuestions(client);
+        if (questions.length === 0) {
+          questionsList.innerHTML = '<p style="color:var(--text-muted)">هنوز سوالی وجود ندارد.</p>';
+          return;
+        }
+
+        questionsList.innerHTML = questions.map((q, i) => `
+          <div class="question-item" data-id="${q.id}">
+            <span class="q-number">${i + 1}</span>
+            <div class="q-text">
+              <input type="text" value="${q.text.replace(/"/g, '&quot;')}" class="edit-input" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit">
+              <small style="color:${q.active ? 'var(--success)' : 'var(--danger)'}">${q.active ? 'فعال' : 'غیرفعال'}</small>
+            </div>
+            <div class="q-actions">
+              <button class="btn btn-primary btn-sm save-btn">ذخیره</button>
+              <button class="btn btn-secondary btn-sm toggle-btn">${q.active ? 'غیرفعال' : 'فعال'}</button>
+              <button class="btn btn-danger btn-sm delete-btn">حذف</button>
+            </div>
+          </div>
+        `).join('');
+
+        questionsList.querySelectorAll('.save-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const item = e.target.closest('.question-item');
+            const id = item.dataset.id;
+            const text = item.querySelector('.edit-input').value.trim();
+            if (!text) return;
+            const { error } = await client.from('questions').update({ text }).eq('id', id);
+            if (error) showAlert(alertBox, error.message, 'error');
+            else showAlert(alertBox, 'سوال ذخیره شد.', 'success');
+          });
+        });
+
+        questionsList.querySelectorAll('.toggle-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const item = e.target.closest('.question-item');
+            const id = item.dataset.id;
+            const isActive = btn.textContent === 'غیرفعال';
+            const { error } = await client.from('questions').update({ active: !isActive }).eq('id', id);
+            if (error) showAlert(alertBox, error.message, 'error');
+            else loadQuestions();
+          });
+        });
+
+        questionsList.querySelectorAll('.delete-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            if (!confirm('آیا از حذف این سوال مطمئنید؟ پاسخ‌های مرتبط هم حذف می‌شوند.')) return;
+            const item = e.target.closest('.question-item');
+            const { error } = await client.from('questions').delete().eq('id', item.dataset.id);
+            if (error) showAlert(alertBox, error.message, 'error');
+            else loadQuestions();
+          });
+        });
+      } catch (err) {
+        questionsList.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      }
+    }
+
+    document.getElementById('add-question-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('new-question');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const questions = await fetchAllQuestions(client);
+      const { error } = await client.from('questions').insert({
+        text,
+        sort_order: questions.length,
+        active: true,
+      });
+
+      if (error) showAlert(alertBox, error.message, 'error');
+      else {
+        input.value = '';
+        showAlert(alertBox, 'سوال اضافه شد.', 'success');
+        loadQuestions();
+      }
+    });
+
+    function generateQR() {
+      const surveyUrl = new URL('index.html', window.location.href).href;
+      document.getElementById('survey-url').textContent = surveyUrl;
+
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      const canvas = document.createElement('canvas');
+      qrContainer.appendChild(canvas);
+
+      QRCode.toCanvas(canvas, surveyUrl, {
+        width: 220,
+        margin: 2,
+        color: { dark: '#1a2332', light: '#ffffff' },
+      });
+
+      document.getElementById('download-qr').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'survey-qrcode.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظرسنجی اهداف و استراتژی</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>نظرسنجی اهداف و استراتژی</h1>
+      <p>نظر شما درباره مهم‌ترین اهداف و راهبردهای دستیابی به آن‌ها</p>
+      <nav class="nav-links">
+        <a href="dashboard.html">داشبورد</a>
+        <a href="admin.html">مدیریت</a>
+      </nav>
+    </header>
+
+    <div id="alert-box"></div>
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>در حال بارگذاری سوالات...</p>
+    </div>
+
+    <form id="survey-form" class="hidden">
+      <div id="questions-container"></div>
+      <button type="submit" class="btn btn-primary btn-block">ثبت نظرات</button>
+    </form>
+
+    <div id="thank-you" class="card hidden" style="text-align:center">
+      <h2>متشکریم!</h2>
+      <p style="color:var(--text-muted);margin-top:0.5rem">نظرات شما با موفقیت ثبت شد.</p>
+    </div>
+  </div>
+
+  <footer>نظرسنجی اهداف و استراتژی</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const form = document.getElementById('survey-form');
+    const loading = document.getElementById('loading');
+    const thankYou = document.getElementById('thank-you');
+    const questionsContainer = document.getElementById('questions-container');
+    const alertBox = document.getElementById('alert-box');
+
+    async function init() {
+      try {
+        const client = getSupabaseClient();
+        const questions = await fetchActiveQuestions(client);
+
+        loading.classList.add('hidden');
+
+        if (questions.length === 0) {
+          questionsContainer.innerHTML = '<div class="alert alert-info">هنوز سوالی تعریف نشده. از پنل مدیریت سوالات را اضافه کنید.</div>';
+          form.classList.remove('hidden');
+          return;
+        }
+
+        questions.forEach((q, i) => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+            <div class="form-group">
+              <label for="q-${q.id}">
+                <span class="q-number" style="display:inline-flex;margin-left:0.5rem">${i + 1}</span>
+                ${q.text}
+              </label>
+              <textarea id="q-${q.id}" name="${q.id}" required placeholder="نظر خود را بنویسید..."></textarea>
+            </div>
+          `;
+          questionsContainer.appendChild(div);
+        });
+
+        form.classList.remove('hidden');
+      } catch (err) {
+        loading.classList.add('hidden');
+        showAlert(alertBox, err.message, 'error');
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.textContent = 'در حال ثبت...';
+
+      try {
+        const client = getSupabaseClient();
+        const entries = [...form.querySelectorAll('textarea')].map((ta) => ({
+          question_id: ta.name,
+          answer: ta.value.trim(),
+        })).filter((e) => e.answer);
+
+        if (entries.length === 0) {
+          showAlert(alertBox, 'لطفاً حداقل به یک سوال پاسخ دهید.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'ثبت نظرات';
+          return;
+        }
+
+        const { error } = await client.from('responses').insert(entries);
+        if (error) throw error;
+
+        form.classList.add('hidden');
+        thankYou.classList.remove('hidden');
+      } catch (err) {
+        showAlert(alertBox, 'خطا در ثبت: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'ثبت نظرات';
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
