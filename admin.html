@@ -103,6 +103,10 @@
       e.preventDefault();
       const pwd = document.getElementById('password').value;
       if (pwd === window.APP_CONFIG.adminPassword) {
+        if (!client) {
+          showAlert(alertBox, 'اتصال به دیتابیس برقرار نیست. config.js را بررسی کنید.', 'error');
+          return;
+        }
         sessionStorage.setItem('admin_logged_in', 'true');
         showAdmin();
       } else {
@@ -116,15 +120,20 @@
       loginSection.classList.remove('hidden');
     });
 
-    if (isLoggedIn()) showAdmin();
-
     try {
       client = getSupabaseClient();
     } catch (err) {
       showAlert(alertBox, err.message, 'error');
     }
 
+    if (isLoggedIn() && client) showAdmin();
+
     async function loadQuestions() {
+      if (!client) {
+        questionsList.innerHTML = '<div class="alert alert-error">اتصال به دیتابیس برقرار نیست. config.js را بررسی کنید.</div>';
+        return;
+      }
+
       try {
         const questions = await fetchAllQuestions(client);
         if (questions.length === 0) {
@@ -186,6 +195,11 @@
 
     document.getElementById('add-question-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!client) {
+        showAlert(alertBox, 'اتصال به دیتابیس برقرار نیست.', 'error');
+        return;
+      }
+
       const input = document.getElementById('new-question');
       const text = input.value.trim();
       if (!text) return;
