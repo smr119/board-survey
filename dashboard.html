@@ -239,18 +239,19 @@
     function render() {
       const responses = getFilteredResponses();
       const texts = responses.map((r) => r.answer);
-      const wordList = tokenizeForWordCloud(texts);
-      currentWordList = wordList;
+      const freqList = tokenizeForDisplay(texts);
+      const cloudList = toWordCloudWeights(freqList);
+      currentWordList = freqList;
 
       document.getElementById('stat-responses').textContent = responses.length;
-      document.getElementById('stat-words').textContent = wordList.length;
+      document.getElementById('stat-words').textContent = freqList.length;
 
       const canvas = document.getElementById('wordcloud-canvas');
       const noDataCloud = document.getElementById('no-data-cloud');
       const noDataTile = document.getElementById('no-data-tile');
       const tilesEl = document.getElementById('word-tiles');
 
-      if (wordList.length === 0) {
+      if (freqList.length === 0) {
         canvas.classList.add('hidden');
         noDataCloud.classList.remove('hidden');
         tilesEl.innerHTML = '';
@@ -261,15 +262,15 @@
 
         if (viewMode === 'cloud') {
           canvas.classList.remove('hidden');
-          renderWordCloud(canvas, wordList);
+          renderWordCloud(canvas, cloudList);
         } else {
           canvas.classList.add('hidden');
-          renderWordTiles(tilesEl, wordList);
+          renderWordTiles(tilesEl, freqList);
         }
       }
 
       const topWords = document.getElementById('top-words');
-      topWords.innerHTML = wordList.slice(0, 20).map(([word, count], i) => `
+      topWords.innerHTML = freqList.slice(0, 20).map(([word, count], i) => `
         <div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border)">
           <span><strong>${i + 1}.</strong> ${word}</span>
           <span style="color:var(--accent);font-weight:600">${count}</span>

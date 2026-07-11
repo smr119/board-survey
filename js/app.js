@@ -28,13 +28,13 @@ function extractWords(segment) {
     .filter((w) => w.length >= 2 && !PERSIAN_STOP_WORDS.has(w));
 }
 
-function tokenizeForWordCloud(texts) {
+function buildTermFrequency(texts) {
   const freq = {};
   const MAX_PHRASE_WORDS = 6;
 
-  function bump(term, weight = 1) {
+  function bump(term) {
     if (!term || term.length < 2) return;
-    freq[term] = (freq[term] || 0) + weight;
+    freq[term] = (freq[term] || 0) + 1;
   }
 
   function addNgrams(words) {
@@ -42,7 +42,7 @@ function tokenizeForWordCloud(texts) {
       for (let i = 0; i <= words.length - n; i++) {
         const slice = words.slice(i, i + n);
         if (slice.every((w) => w.length >= 2)) {
-          bump(slice.join(' '), n === 3 ? 1.5 : 1.2);
+          bump(slice.join(' '));
         }
       }
     }
@@ -62,14 +62,14 @@ function tokenizeForWordCloud(texts) {
       if (words.length === 0) return;
 
       if (rawWordCount <= MAX_PHRASE_WORDS) {
-        bump(segment, 2.5);
+        bump(segment);
         return;
       }
 
       if (words.length === 1) {
         bump(words[0]);
       } else if (words.length <= MAX_PHRASE_WORDS) {
-        bump(words.join(' '), 2);
+        bump(words.join(' '));
       } else {
         addNgrams(words);
         words.forEach((w) => bump(w));
@@ -81,6 +81,21 @@ function tokenizeForWordCloud(texts) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 150)
     .map(([term, count]) => [term, count]);
+}
+
+function toWordCloudWeights(freqList) {
+  return freqList.map(([term, count]) => {
+    const hasSpace = /\s/.test(term);
+    return [term, hasSpace ? count * 1.5 : count];
+  });
+}
+
+function tokenizeForWordCloud(texts) {
+  return buildTermFrequency(texts);
+}
+
+function tokenizeForDisplay(texts) {
+  return buildTermFrequency(texts);
 }
 
 function showAlert(container, message, type = 'info') {
@@ -345,7 +360,7 @@ function renderWordTiles(container, wordList) {
     return `
       <div class="word-tile" style="--tile-color:${color};--tile-size:${fontSize}px">
         <span class="word-tile-text">${escapeHtml(term)}</span>
-        <span class="word-tile-count">${count}</span>
+        <span class="word-tile-count">${Math.round(count)}</span>
       </div>
     `;
   }).join('');
