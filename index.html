@@ -15,6 +15,10 @@
       <p id="survey-subtitle">نظر شما درباره مهم‌ترین اهداف و راهبردهای دستیابی به آن‌ها</p>
     </header>
 
+    <div id="survey-banner-wrap" class="survey-banner-wrap hidden">
+      <img id="survey-banner" class="survey-banner" alt="تصویر نظرسنجی">
+    </div>
+
     <div id="alert-box"></div>
     <div id="loading" class="loading">
       <div class="spinner"></div>
@@ -69,15 +73,7 @@
         questions.forEach((q, i) => {
           const div = document.createElement('div');
           div.className = 'card';
-          div.innerHTML = `
-            <div class="form-group">
-              <label for="q-${q.id}">
-                <span class="q-number" style="display:inline-flex;margin-left:0.5rem">${i + 1}</span>
-                ${q.text}
-              </label>
-              <textarea id="q-${q.id}" name="${q.id}" required placeholder="نظر خود را بنویسید..."></textarea>
-            </div>
-          `;
+          div.innerHTML = renderQuestionInput(q, i);
           questionsContainer.appendChild(div);
         });
 
@@ -96,10 +92,7 @@
 
       try {
         const client = getSupabaseClient();
-        const entries = [...form.querySelectorAll('textarea')].map((ta) => ({
-          question_id: ta.name,
-          answer: ta.value.trim(),
-        })).filter((e) => e.answer);
+        const entries = collectSurveyAnswers(form);
 
         if (entries.length === 0) {
           showAlert(alertBox, 'لطفاً حداقل به یک سوال پاسخ دهید.', 'error');

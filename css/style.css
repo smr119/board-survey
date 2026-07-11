@@ -121,7 +121,9 @@ header p {
 
 .form-group textarea,
 .form-group input[type="text"],
-.form-group input[type="password"] {
+.form-group input[type="password"],
+.form-group input[type="file"],
+.form-group select {
   width: 100%;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
@@ -134,12 +136,17 @@ header p {
   transition: border-color 0.2s;
 }
 
+.form-group input[type="file"] {
+  padding: 0.5rem;
+}
+
 .form-group textarea {
   min-height: 100px;
 }
 
 .form-group textarea:focus,
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -432,6 +439,69 @@ footer {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
+}
+
+.survey-banner-wrap,
+.image-preview-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.survey-banner {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.q-type-badge {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.choice-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.choice-option:hover {
+  border-color: var(--accent);
+}
+
+.choice-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.choice-option span {
+  flex: 1;
+}
+
+.question-item--edit .q-text {
+  flex: 1;
 }
 
 @media (max-width: 600px) {

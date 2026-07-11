@@ -46,6 +46,15 @@
             <label for="setting-subtitle">زیرعنوان</label>
             <input type="text" id="setting-subtitle" required placeholder="مثال: نظر شما درباره روندهای آینده">
           </div>
+          <div class="form-group">
+            <label for="setting-image">تصویر صفحه پرسشنامه</label>
+            <input type="file" id="setting-image" accept="image/*">
+            <small style="color:var(--text-muted);display:block;margin-top:0.5rem">حداکثر ۲ مگابایت — JPG یا PNG</small>
+          </div>
+          <div id="image-preview-wrap" class="image-preview-wrap hidden">
+            <img id="image-preview" class="survey-banner" alt="پیش‌نمایش تصویر">
+            <button type="button" id="remove-image-btn" class="btn btn-danger btn-sm" style="margin-top:0.75rem">حذف تصویر</button>
+          </div>
           <button type="submit" class="btn btn-primary">ذخیره تنظیمات</button>
         </form>
       </div>
@@ -56,6 +65,18 @@
           <div class="form-group">
             <label for="new-question">متن سوال</label>
             <input type="text" id="new-question" required placeholder="مثال: مهم‌ترین هدف سازمان شما چیست؟">
+          </div>
+          <div class="form-group">
+            <label for="new-question-type">نوع سوال</label>
+            <select id="new-question-type">
+              <option value="open">باز (متنی)</option>
+              <option value="single">تک‌گزینه‌ای</option>
+              <option value="multi">چندگزینه‌ای</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="new-options-wrap">
+            <label for="new-options">گزینه‌ها (هر خط یک گزینه)</label>
+            <textarea id="new-options" rows="4" placeholder="گزینه اول&#10;گزینه دوم&#10;گزینه سوم"></textarea>
           </div>
           <button type="submit" class="btn btn-success">افزودن سوال</button>
         </form>
@@ -115,6 +136,16 @@
     const alertBox = document.getElementById('alert-box');
     const questionsList = document.getElementById('questions-list');
     let client;
+    let currentImageUrl = '';
+
+    function toggleOptionsField(selectEl, wrapEl) {
+      const show = selectEl.value !== 'open';
+      wrapEl.classList.toggle('hidden', !show);
+    }
+
+    document.getElementById('new-question-type').addEventListener('change', (e) => {
+      toggleOptionsField(e.target, document.getElementById('new-options-wrap'));
+    });
 
     function isLoggedIn() {
       return sessionStorage.getItem('admin_logged_in') === 'true';
@@ -163,10 +194,38 @@
         const settings = await fetchSettings(client);
         document.getElementById('setting-title').value = settings.survey_title;
         document.getElementById('setting-subtitle').value = settings.survey_subtitle;
+        currentImageUrl = settings.survey_image_url || '';
+
+        const previewWrap = document.getElementById('image-preview-wrap');
+        const previewImg = document.getElementById('image-preview');
+        if (currentImageUrl) {
+          previewImg.src = currentImageUrl;
+          previewWrap.classList.remove('hidden');
+        } else {
+          previewImg.removeAttribute('src');
+          previewWrap.classList.add('hidden');
+        }
       } catch (err) {
         showAlert(alertBox, 'خطا در بارگذاری تنظیمات: ' + err.message, 'error');
       }
     }
+
+    document.getElementById('remove-image-btn').addEventListener('click', async () => {
+      if (!client || !currentImageUrl) return;
+      if (!confirm('تصویر حذف شود؟')) return;
+
+      try {
+        await removeSurveyImage(client, currentImageUrl);
+        await saveSettings(client, { survey_image_url: '' });
+        currentImageUrl = '';
+        document.getElementById('image-preview').removeAttribute('src');
+        document.getElementById('image-preview-wrap').classList.add('hidden');
+        document.getElementById('setting-image').value = '';
+        showAlert(alertBox, 'تصویر حذف شد.', 'success');
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
 
     document.getElementById('settings-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -176,10 +235,24 @@
       }
 
       try {
-        await saveSettings(client, {
+        const settings = {
           survey_title: document.getElementById('setting-title').value.trim(),
           survey_subtitle: document.getElementById('setting-subtitle').value.trim(),
-        });
+        };
+
+        const imageFile = document.getElementById('setting-image').files[0];
+        if (imageFile) {
+          if (currentImageUrl) await removeSurveyImage(client, currentImageUrl);
+          settings.survey_image_url = await uploadSurveyImage(client, imageFile);
+          currentImageUrl = settings.survey_image_url;
+          document.getElementById('image-preview').src = currentImageUrl;
+          document.getElementById('image-preview-wrap').classList.remove('hidden');
+          document.getElementById('setting-image').value = '';
+        } else {
+          settings.survey_image_url = currentImageUrl;
+        }
+
+        await saveSettings(client, settings);
         showAlert(alertBox, 'تنظیمات ذخیره شد.', 'success');
       } catch (err) {
         showAlert(alertBox, err.message, 'error');
@@ -224,12 +297,27 @@
           return;
         }
 
-        questionsList.innerHTML = questions.map((q, i) => `
-          <div class="question-item" data-id="${q.id}">
+        questionsList.innerHTML = questions.map((q, i) => {
+          const qType = q.question_type || 'open';
+          const options = parseQuestionOptions(q.options).join('\n');
+          return `
+          <div class="question-item question-item--edit" data-id="${q.id}" data-type="${qType}">
             <span class="q-number">${i + 1}</span>
             <div class="q-text">
               <input type="text" value="${q.text.replace(/"/g, '&quot;')}" class="edit-input" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit">
-              <small style="color:${q.active ? 'var(--success)' : 'var(--danger)'}">${q.active ? 'فعال' : 'غیرفعال'}</small>
+              <div class="form-group" style="margin:0.75rem 0 0">
+                <label>نوع سوال</label>
+                <select class="edit-type" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit">
+                  <option value="open" ${qType === 'open' ? 'selected' : ''}>باز (متنی)</option>
+                  <option value="single" ${qType === 'single' ? 'selected' : ''}>تک‌گزینه‌ای</option>
+                  <option value="multi" ${qType === 'multi' ? 'selected' : ''}>چندگزینه‌ای</option>
+                </select>
+              </div>
+              <div class="form-group edit-options-wrap ${qType === 'open' ? 'hidden' : ''}" style="margin:0.5rem 0 0">
+                <label>گزینه‌ها (هر خط یک گزینه)</label>
+                <textarea class="edit-options" rows="3" style="width:100%;padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit">${options.replace(/</g, '&lt;')}</textarea>
+              </div>
+              <small style="color:${q.active ? 'var(--success)' : 'var(--danger)'}">${q.active ? 'فعال' : 'غیرفعال'} — ${getQuestionTypeLabel(qType)}</small>
             </div>
             <div class="q-actions">
               <button class="btn btn-primary btn-sm save-btn">ذخیره</button>
@@ -237,17 +325,42 @@
               <button class="btn btn-danger btn-sm delete-btn">حذف</button>
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
+
+        questionsList.querySelectorAll('.edit-type').forEach((select) => {
+          select.addEventListener('change', (e) => {
+            const item = e.target.closest('.question-item');
+            const wrap = item.querySelector('.edit-options-wrap');
+            wrap.classList.toggle('hidden', e.target.value === 'open');
+          });
+        });
 
         questionsList.querySelectorAll('.save-btn').forEach((btn) => {
           btn.addEventListener('click', async (e) => {
             const item = e.target.closest('.question-item');
             const id = item.dataset.id;
             const text = item.querySelector('.edit-input').value.trim();
+            const question_type = item.querySelector('.edit-type').value;
+            const optionsText = item.querySelector('.edit-options')?.value || '';
+            const options = parseQuestionOptions(optionsText);
+
             if (!text) return;
-            const { error } = await client.from('questions').update({ text }).eq('id', id);
+            if (question_type !== 'open' && options.length < 2) {
+              showAlert(alertBox, 'برای سوال گزینه‌ای حداقل ۲ گزینه وارد کنید.', 'error');
+              return;
+            }
+
+            const { error } = await client.from('questions').update({
+              text,
+              question_type,
+              options,
+            }).eq('id', id);
             if (error) showAlert(alertBox, error.message, 'error');
-            else showAlert(alertBox, 'سوال ذخیره شد.', 'success');
+            else {
+              showAlert(alertBox, 'سوال ذخیره شد.', 'success');
+              loadQuestions();
+            }
           });
         });
 
@@ -285,11 +398,20 @@
 
       const input = document.getElementById('new-question');
       const text = input.value.trim();
+      const question_type = document.getElementById('new-question-type').value;
+      const options = parseQuestionOptions(document.getElementById('new-options').value);
       if (!text) return;
+
+      if (question_type !== 'open' && options.length < 2) {
+        showAlert(alertBox, 'برای سوال گزینه‌ای حداقل ۲ گزینه وارد کنید.', 'error');
+        return;
+      }
 
       const questions = await fetchAllQuestions(client);
       const { error } = await client.from('questions').insert({
         text,
+        question_type,
+        options,
         sort_order: questions.length,
         active: true,
       });
@@ -297,6 +419,9 @@
       if (error) showAlert(alertBox, error.message, 'error');
       else {
         input.value = '';
+        document.getElementById('new-question-type').value = 'open';
+        document.getElementById('new-options').value = '';
+        document.getElementById('new-options-wrap').classList.add('hidden');
         showAlert(alertBox, 'سوال اضافه شد.', 'success');
         loadQuestions();
       }
