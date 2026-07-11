@@ -111,6 +111,116 @@ function getSurveyPublicUrl(surveyId) {
   return url.href;
 }
 
+const DEVICE_ID_KEY = 'board_survey_device_id';
+
+function getDeviceId() {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+function getLocalCompletionKey(surveyId) {
+  return `survey_completed_${surveyId}`;
+}
+
+function markLocalCompletion(surveyId) {
+  localStorage.setItem(getLocalCompletionKey(surveyId), '1');
+}
+
+function hasLocalCompletion(surveyId) {
+  return localStorage.getItem(getLocalCompletionKey(surveyId)) === '1';
+}
+
+async function hasDeviceCompletedSurvey(client, surveyId, deviceId) {
+  if (hasLocalCompletion(surveyId)) return true;
+
+  const { data, error } = await client
+    .from('survey_completions')
+    .select('id')
+    .eq('survey_id', surveyId)
+    .eq('device_id', deviceId)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42P01') return false;
+    throw error;
+  }
+
+  if (data) {
+    markLocalCompletion(surveyId);
+    return true;
+  }
+  return false;
+}
+
+async function markDeviceCompleted(client, surveyId, deviceId) {
+  const { error } = await client.from('survey_completions').insert({
+    survey_id: surveyId,
+    device_id: deviceId,
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      markLocalCompletion(surveyId);
+      throw new Error('ALREADY_COMPLETED');
+    }
+    throw error;
+  }
+
+  markLocalCompletion(surveyId);
+}
+
+async function clearSurveyCompletions(client, surveyId) {
+  const { error } = await client
+    .from('survey_completions')
+    .delete()
+    .eq('survey_id', surveyId);
+
+  if (error && error.code !== '42P01') throw error;
+}
+
+async function submitSurveyResponses(client, surveyId, entries) {
+  const deviceId = getDeviceId();
+
+  if (await hasDeviceCompletedSurvey(client, surveyId, deviceId)) {
+    throw new Error('ALREADY_COMPLETED');
+  }
+
+  await markDeviceCompleted(client, surveyId, deviceId);
+
+  const { error } = await client.from('responses').insert(entries);
+  if (error) {
+    await client
+      .from('survey_completions')
+      .delete()
+      .eq('survey_id', surveyId)
+      .eq('device_id', deviceId);
+    localStorage.removeItem(getLocalCompletionKey(surveyId));
+    throw error;
+  }
+}
+
+function showAlreadySubmitted() {
+  const form = document.getElementById('survey-form');
+  const already = document.getElementById('already-submitted');
+  const thankYou = document.getElementById('thank-you');
+  if (form) form.classList.add('hidden');
+  if (thankYou) thankYou.classList.add('hidden');
+  if (already) already.classList.remove('hidden');
+}
+
+function showThankYou() {
+  const form = document.getElementById('survey-form');
+  const already = document.getElementById('already-submitted');
+  const thankYou = document.getElementById('thank-you');
+  if (form) form.classList.add('hidden');
+  if (already) already.classList.add('hidden');
+  if (thankYou) thankYou.classList.remove('hidden');
+}
+
 async function fetchAllSurveys(client) {
   const { data, error } = await client
     .from('surveys')
@@ -207,10 +317,11 @@ async function fetchResponses(client, options = {}) {
 async function clearSurveyResponses(client, surveyId) {
   const questions = await fetchAllQuestions(client, surveyId);
   const ids = questions.map((q) => q.id);
-  if (!ids.length) return;
-
-  const { error } = await client.from('responses').delete().in('question_id', ids);
-  if (error) throw error;
+  if (ids.length) {
+    const { error } = await client.from('responses').delete().in('question_id', ids);
+    if (error) throw error;
+  }
+  await clearSurveyCompletions(client, surveyId);
 }
 
 async function clearSurveyQuestions(client, surveyId) {

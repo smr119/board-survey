@@ -38,6 +38,11 @@
       <h2>متشکریم!</h2>
       <p style="color:var(--text-muted);margin-top:0.5rem">نظرات شما با موفقیت ثبت شد.</p>
     </div>
+
+    <div id="already-submitted" class="card hidden" style="text-align:center">
+      <h2>قبلاً شرکت کرده‌اید</h2>
+      <p style="color:var(--text-muted);margin-top:0.5rem">هر دستگاه فقط یک‌بار می‌تواند در این پرسشنامه شرکت کند.</p>
+    </div>
   </div>
 
   <footer class="site-footer">
@@ -57,11 +62,13 @@
     const thankYou = document.getElementById('thank-you');
     const questionsContainer = document.getElementById('questions-container');
     const alertBox = document.getElementById('alert-box');
+    let currentSurveyId = null;
 
     async function init() {
       try {
         const client = getSupabaseClient();
         const surveyId = getSurveyIdFromUrl();
+        currentSurveyId = surveyId;
 
         if (!surveyId) {
           loading.classList.add('hidden');
@@ -83,6 +90,14 @@
         }
 
         applySurveyHeader(survey);
+
+        const deviceId = getDeviceId();
+        if (await hasDeviceCompletedSurvey(client, surveyId, deviceId)) {
+          loading.classList.add('hidden');
+          showAlreadySubmitted();
+          return;
+        }
+
         const questions = await fetchActiveQuestions(client, surveyId);
 
         loading.classList.add('hidden');
@@ -124,12 +139,13 @@
           return;
         }
 
-        const { error } = await client.from('responses').insert(entries);
-        if (error) throw error;
-
-        form.classList.add('hidden');
-        thankYou.classList.remove('hidden');
+        await submitSurveyResponses(client, currentSurveyId, entries);
+        showThankYou();
       } catch (err) {
+        if (err.message === 'ALREADY_COMPLETED') {
+          showAlreadySubmitted();
+          return;
+        }
         showAlert(alertBox, 'خطا در ثبت: ' + err.message, 'error');
         btn.disabled = false;
         btn.textContent = 'ثبت نظرات';
