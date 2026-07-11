@@ -284,6 +284,7 @@ function applySurveyHeader(settings) {
   }
 }
 
+async function fetchSettings(client) {
   const settings = { ...DEFAULT_SETTINGS };
   const { data, error } = await client.from('site_settings').select('key, value');
   if (error) return settings;
@@ -305,7 +306,7 @@ async function saveSettings(client, settings) {
   if (error) throw error;
 }
 
-async function fetchSettings(client) {
+async function clearAllResponses(client) {
   const { error } = await client
     .from('responses')
     .delete()
