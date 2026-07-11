@@ -14,7 +14,7 @@
       <h1>داشبورد نتایج</h1>
       <p>نمایش ابر واژگان از نظرات شرکت‌کنندگان</p>
       <nav class="nav-links">
-        <a href="index.html">نظرسنجی</a>
+        <a href="index.html" id="survey-preview-link" target="_blank" rel="noopener">نظرسنجی</a>
         <a href="admin.html">مدیریت</a>
       </nav>
     </header>
@@ -181,6 +181,8 @@
 
         currentSurveyId = allSurveys[0].id;
         surveyFilter.value = currentSurveyId;
+        const previewLink = document.getElementById('survey-preview-link');
+        if (previewLink) previewLink.href = getSurveyPublicUrl(currentSurveyId);
         await reloadSurveyData();
 
         loading.classList.add('hidden');
@@ -226,6 +228,8 @@
     surveyFilter.addEventListener('change', async () => {
       currentSurveyId = surveyFilter.value;
       questionFilter.value = 'all';
+      const previewLink = document.getElementById('survey-preview-link');
+      if (previewLink) previewLink.href = getSurveyPublicUrl(currentSurveyId);
       await reloadSurveyData();
       render();
     });
