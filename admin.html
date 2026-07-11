@@ -47,6 +47,11 @@
             <input type="text" id="setting-subtitle" required placeholder="مثال: نظر شما درباره روندهای آینده">
           </div>
           <div class="form-group">
+            <label for="setting-description">توضیحات / هدف پرسشنامه</label>
+            <textarea id="setting-description" rows="4" placeholder="مثال: هدف این نظرسنجی جمع‌آوری دیدگاه‌های شما درباره اولویت‌های آینده سازمان است..."></textarea>
+            <small style="color:var(--text-muted);display:block;margin-top:0.5rem">این متن زیر تصویر در صفحه پرسشنامه نمایش داده می‌شود</small>
+          </div>
+          <div class="form-group">
             <label for="setting-image">تصویر صفحه پرسشنامه</label>
             <input type="file" id="setting-image" accept="image/*">
             <small style="color:var(--text-muted);display:block;margin-top:0.5rem">حداکثر ۲ مگابایت — JPG یا PNG</small>
@@ -194,6 +199,7 @@
         const settings = await fetchSettings(client);
         document.getElementById('setting-title').value = settings.survey_title;
         document.getElementById('setting-subtitle').value = settings.survey_subtitle;
+        document.getElementById('setting-description').value = settings.survey_description || '';
         currentImageUrl = settings.survey_image_url || '';
 
         const previewWrap = document.getElementById('image-preview-wrap');
@@ -238,6 +244,7 @@
         const settings = {
           survey_title: document.getElementById('setting-title').value.trim(),
           survey_subtitle: document.getElementById('setting-subtitle').value.trim(),
+          survey_description: document.getElementById('setting-description').value.trim(),
         };
 
         const imageFile = document.getElementById('setting-image').files[0];

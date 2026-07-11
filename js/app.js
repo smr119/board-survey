@@ -57,8 +57,14 @@ function tokenizeForWordCloud(texts) {
       .filter(Boolean);
 
     segments.forEach((segment) => {
+      const rawWordCount = segment.split(/[\s\-–—]+/).filter((w) => w.trim()).length;
       const words = extractWords(segment);
       if (words.length === 0) return;
+
+      if (rawWordCount <= MAX_PHRASE_WORDS) {
+        bump(segment, 2.5);
+        return;
+      }
 
       if (words.length === 1) {
         bump(words[0]);
@@ -129,6 +135,7 @@ const DEFAULT_SETTINGS = {
   survey_title: 'نظرسنجی اهداف و استراتژی',
   survey_subtitle: 'نظر شما درباره مهم‌ترین اهداف و راهبردهای دستیابی به آن‌ها',
   survey_image_url: '',
+  survey_description: '',
 };
 
 const QUESTION_TYPES = {
@@ -281,6 +288,20 @@ function applySurveyHeader(settings) {
   } else {
     bannerImg.removeAttribute('src');
     bannerWrap.classList.add('hidden');
+  }
+
+  const descWrap = document.getElementById('survey-description-wrap');
+  const descEl = document.getElementById('survey-description');
+  const description = (settings.survey_description || '').trim();
+
+  if (descWrap && descEl) {
+    if (description) {
+      descEl.textContent = description;
+      descWrap.classList.remove('hidden');
+    } else {
+      descEl.textContent = '';
+      descWrap.classList.add('hidden');
+    }
   }
 }
 
