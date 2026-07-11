@@ -36,6 +36,26 @@
     <!-- Admin Panel -->
     <div id="admin-panel" class="hidden">
       <div class="card">
+        <h2>مدیریت پرسشنامه‌ها</h2>
+        <div class="filter-bar" style="margin-bottom:1rem">
+          <label for="survey-select">پرسشنامه فعال:</label>
+          <select id="survey-select" style="flex:1;min-width:200px"></select>
+        </div>
+        <div class="admin-actions">
+          <button type="button" id="create-survey-btn" class="btn btn-success btn-sm">پرسشنامه جدید</button>
+          <button type="button" id="delete-survey-btn" class="btn btn-danger btn-sm">حذف پرسشنامه</button>
+        </div>
+        <form id="create-survey-form" class="hidden" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+          <div class="form-group">
+            <label for="new-survey-title">عنوان پرسشنامه جدید</label>
+            <input type="text" id="new-survey-title" required placeholder="مثال: سناریوپلننیگ">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">ایجاد</button>
+          <button type="button" id="cancel-create-survey" class="btn btn-secondary btn-sm">انصراف</button>
+        </form>
+      </div>
+
+      <div class="card">
         <h2>تنظیمات صفحه نظرسنجی</h2>
         <form id="settings-form">
           <div class="form-group">
@@ -97,11 +117,11 @@
       <div class="card danger-zone">
         <h2>مدیریت داده‌ها</h2>
         <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1rem">
-          برای شروع نظرسنجی جدید می‌توانید پاسخ‌ها یا کل داده‌ها را پاک کنید.
+          هر پرسشنامه لینک و QR Code مخصوص خودش را دارد.
         </p>
         <div class="admin-actions">
-          <button id="clear-responses-btn" class="btn btn-danger btn-sm">پاک کردن همه پاسخ‌ها</button>
-          <button id="clear-all-btn" class="btn btn-danger btn-sm">پاک کردن کامل (سوالات + پاسخ‌ها)</button>
+          <button id="clear-responses-btn" class="btn btn-danger btn-sm">پاک کردن پاسخ‌های این پرسشنامه</button>
+          <button id="clear-all-btn" class="btn btn-danger btn-sm">پاک کردن سوالات این پرسشنامه</button>
         </div>
       </div>
 
@@ -140,8 +160,11 @@
     const adminPanel = document.getElementById('admin-panel');
     const alertBox = document.getElementById('alert-box');
     const questionsList = document.getElementById('questions-list');
+    const surveySelect = document.getElementById('survey-select');
     let client;
+    let currentSurveyId = null;
     let currentImageUrl = '';
+    let allSurveys = [];
 
     function toggleOptionsField(selectEl, wrapEl) {
       const show = selectEl.value !== 'open';
@@ -156,13 +179,107 @@
       return sessionStorage.getItem('admin_logged_in') === 'true';
     }
 
-    function showAdmin() {
+    async function showAdmin() {
       loginSection.classList.add('hidden');
       adminPanel.classList.remove('hidden');
-      loadSettings();
-      loadQuestions();
-      generateQR();
+      await loadSurveys();
+      if (currentSurveyId) {
+        await loadSettings();
+        await loadQuestions();
+        await generateQR();
+      }
     }
+
+    async function loadSurveys() {
+      if (!client) return;
+      allSurveys = await fetchAllSurveys(client);
+      surveySelect.innerHTML = '';
+
+      if (allSurveys.length === 0) {
+        surveySelect.innerHTML = '<option value="">پرسشنامه‌ای وجود ندارد</option>';
+        currentSurveyId = null;
+        return;
+      }
+
+      allSurveys.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.title;
+        surveySelect.appendChild(opt);
+      });
+
+      const saved = sessionStorage.getItem('admin_survey_id');
+      currentSurveyId = allSurveys.some((s) => s.id === saved) ? saved : allSurveys[0].id;
+      surveySelect.value = currentSurveyId;
+      sessionStorage.setItem('admin_survey_id', currentSurveyId);
+    }
+
+    surveySelect.addEventListener('change', async () => {
+      currentSurveyId = surveySelect.value;
+      sessionStorage.setItem('admin_survey_id', currentSurveyId);
+      await loadSettings();
+      await loadQuestions();
+      await generateQR();
+    });
+
+    document.getElementById('create-survey-btn').addEventListener('click', () => {
+      document.getElementById('create-survey-form').classList.remove('hidden');
+    });
+
+    document.getElementById('cancel-create-survey').addEventListener('click', () => {
+      document.getElementById('create-survey-form').classList.add('hidden');
+      document.getElementById('new-survey-title').value = '';
+    });
+
+    document.getElementById('create-survey-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!client) return;
+
+      const title = document.getElementById('new-survey-title').value.trim();
+      if (!title) return;
+
+      try {
+        const survey = await createSurvey(client, { title, subtitle: '', description: '', image_url: '' });
+        document.getElementById('create-survey-form').classList.add('hidden');
+        document.getElementById('new-survey-title').value = '';
+        await loadSurveys();
+        currentSurveyId = survey.id;
+        surveySelect.value = currentSurveyId;
+        sessionStorage.setItem('admin_survey_id', currentSurveyId);
+        await loadSettings();
+        await loadQuestions();
+        await generateQR();
+        showAlert(alertBox, 'پرسشنامه جدید ایجاد شد.', 'success');
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
+
+    document.getElementById('delete-survey-btn').addEventListener('click', async () => {
+      if (!client || !currentSurveyId) return;
+      const current = allSurveys.find((s) => s.id === currentSurveyId);
+      if (!confirm(`پرسشنامه «${current?.title || ''}» و همه سوالات و پاسخ‌هایش حذف شود؟`)) return;
+
+      try {
+        if (current?.image_url) await removeSurveyImage(client, current.image_url);
+        await deleteSurvey(client, currentSurveyId);
+        await loadSurveys();
+        if (allSurveys.length) {
+          currentSurveyId = allSurveys[0].id;
+          surveySelect.value = currentSurveyId;
+          sessionStorage.setItem('admin_survey_id', currentSurveyId);
+          await loadSettings();
+          await loadQuestions();
+          await generateQR();
+        } else {
+          currentSurveyId = null;
+          questionsList.innerHTML = '<p style="color:var(--text-muted)">پرسشنامه‌ای وجود ندارد. یک پرسشنامه جدید بسازید.</p>';
+        }
+        showAlert(alertBox, 'پرسشنامه حذف شد.', 'success');
+      } catch (err) {
+        showAlert(alertBox, err.message, 'error');
+      }
+    });
 
     document.getElementById('login-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -194,13 +311,15 @@
     if (isLoggedIn() && client) showAdmin();
 
     async function loadSettings() {
-      if (!client) return;
+      if (!client || !currentSurveyId) return;
       try {
-        const settings = await fetchSettings(client);
-        document.getElementById('setting-title').value = settings.survey_title;
-        document.getElementById('setting-subtitle').value = settings.survey_subtitle;
-        document.getElementById('setting-description').value = settings.survey_description || '';
-        currentImageUrl = settings.survey_image_url || '';
+        const survey = await fetchSurvey(client, currentSurveyId);
+        if (!survey) return;
+
+        document.getElementById('setting-title').value = survey.title || '';
+        document.getElementById('setting-subtitle').value = survey.subtitle || '';
+        document.getElementById('setting-description').value = survey.description || '';
+        currentImageUrl = survey.image_url || '';
 
         const previewWrap = document.getElementById('image-preview-wrap');
         const previewImg = document.getElementById('image-preview');
@@ -217,12 +336,12 @@
     }
 
     document.getElementById('remove-image-btn').addEventListener('click', async () => {
-      if (!client || !currentImageUrl) return;
+      if (!client || !currentSurveyId || !currentImageUrl) return;
       if (!confirm('تصویر حذف شود؟')) return;
 
       try {
         await removeSurveyImage(client, currentImageUrl);
-        await saveSettings(client, { survey_image_url: '' });
+        await updateSurvey(client, currentSurveyId, { image_url: '' });
         currentImageUrl = '';
         document.getElementById('image-preview').removeAttribute('src');
         document.getElementById('image-preview-wrap').classList.add('hidden');
@@ -235,31 +354,32 @@
 
     document.getElementById('settings-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!client) {
-        showAlert(alertBox, 'اتصال به دیتابیس برقرار نیست.', 'error');
+      if (!client || !currentSurveyId) {
+        showAlert(alertBox, 'ابتدا یک پرسشنامه انتخاب کنید.', 'error');
         return;
       }
 
       try {
-        const settings = {
-          survey_title: document.getElementById('setting-title').value.trim(),
-          survey_subtitle: document.getElementById('setting-subtitle').value.trim(),
-          survey_description: document.getElementById('setting-description').value.trim(),
+        const updates = {
+          title: document.getElementById('setting-title').value.trim(),
+          subtitle: document.getElementById('setting-subtitle').value.trim(),
+          description: document.getElementById('setting-description').value.trim(),
         };
 
         const imageFile = document.getElementById('setting-image').files[0];
         if (imageFile) {
           if (currentImageUrl) await removeSurveyImage(client, currentImageUrl);
-          settings.survey_image_url = await uploadSurveyImage(client, imageFile);
-          currentImageUrl = settings.survey_image_url;
+          updates.image_url = await uploadSurveyImage(client, imageFile, currentSurveyId);
+          currentImageUrl = updates.image_url;
           document.getElementById('image-preview').src = currentImageUrl;
           document.getElementById('image-preview-wrap').classList.remove('hidden');
           document.getElementById('setting-image').value = '';
         } else {
-          settings.survey_image_url = currentImageUrl;
+          updates.image_url = currentImageUrl;
         }
 
-        await saveSettings(client, settings);
+        await updateSurvey(client, currentSurveyId, updates);
+        await loadSurveys();
         showAlert(alertBox, 'تنظیمات ذخیره شد.', 'success');
       } catch (err) {
         showAlert(alertBox, err.message, 'error');
@@ -267,24 +387,24 @@
     });
 
     document.getElementById('clear-responses-btn').addEventListener('click', async () => {
-      if (!client) return;
-      if (!confirm('همه پاسخ‌ها حذف شوند؟ این کار قابل بازگشت نیست.')) return;
+      if (!client || !currentSurveyId) return;
+      if (!confirm('پاسخ‌های این پرسشنامه حذف شوند؟')) return;
 
       try {
-        await clearAllResponses(client);
-        showAlert(alertBox, 'همه پاسخ‌ها پاک شد.', 'success');
+        await clearSurveyResponses(client, currentSurveyId);
+        showAlert(alertBox, 'پاسخ‌ها پاک شد.', 'success');
       } catch (err) {
         showAlert(alertBox, err.message, 'error');
       }
     });
 
     document.getElementById('clear-all-btn').addEventListener('click', async () => {
-      if (!client) return;
-      if (!confirm('همه سوالات و پاسخ‌ها حذف شوند؟ این کار قابل بازگشت نیست.')) return;
+      if (!client || !currentSurveyId) return;
+      if (!confirm('سوالات این پرسشنامه حذف شوند؟')) return;
 
       try {
-        await clearAllQuestions(client);
-        showAlert(alertBox, 'دیتابیس پاک شد.', 'success');
+        await clearSurveyQuestions(client, currentSurveyId);
+        showAlert(alertBox, 'سوالات پاک شد.', 'success');
         loadQuestions();
       } catch (err) {
         showAlert(alertBox, err.message, 'error');
@@ -293,12 +413,17 @@
 
     async function loadQuestions() {
       if (!client) {
-        questionsList.innerHTML = '<div class="alert alert-error">اتصال به دیتابیس برقرار نیست. config.js را بررسی کنید.</div>';
+        questionsList.innerHTML = '<div class="alert alert-error">اتصال به دیتابیس برقرار نیست.</div>';
+        return;
+      }
+
+      if (!currentSurveyId) {
+        questionsList.innerHTML = '<p style="color:var(--text-muted)">ابتدا یک پرسشنامه انتخاب یا ایجاد کنید.</p>';
         return;
       }
 
       try {
-        const questions = await fetchAllQuestions(client);
+        const questions = await fetchAllQuestions(client, currentSurveyId);
         if (questions.length === 0) {
           questionsList.innerHTML = '<p style="color:var(--text-muted)">هنوز سوالی وجود ندارد.</p>';
           return;
@@ -403,6 +528,11 @@
         return;
       }
 
+      if (!currentSurveyId) {
+        showAlert(alertBox, 'ابتدا یک پرسشنامه انتخاب یا ایجاد کنید.', 'error');
+        return;
+      }
+
       const input = document.getElementById('new-question');
       const text = input.value.trim();
       const question_type = document.getElementById('new-question-type').value;
@@ -414,11 +544,12 @@
         return;
       }
 
-      const questions = await fetchAllQuestions(client);
+      const questions = await fetchAllQuestions(client, currentSurveyId);
       const { error } = await client.from('questions').insert({
         text,
         question_type,
         options,
+        survey_id: currentSurveyId,
         sort_order: questions.length,
         active: true,
       });
@@ -435,7 +566,8 @@
     });
 
     async function generateQR() {
-      const surveyUrl = getSurveyUrl();
+      if (!currentSurveyId) return;
+      const surveyUrl = getSurveyUrl(currentSurveyId);
       document.getElementById('survey-url').textContent = surveyUrl;
 
       const qrContainer = document.getElementById('qrcode');

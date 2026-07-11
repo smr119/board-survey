@@ -61,19 +61,33 @@
       </div>
 
       <div class="filter-bar">
-        <label for="question-filter">فیلتر بر اساس سوال:</label>
+        <label for="survey-filter">پرسشنامه:</label>
+        <select id="survey-filter"></select>
+        <label for="question-filter">سوال:</label>
         <select id="question-filter">
           <option value="all">همه سوالات</option>
         </select>
         <button id="refresh-btn" class="btn btn-secondary btn-sm">بروزرسانی</button>
       </div>
 
-      <div class="card wordcloud-card">
+      <div class="view-toggle-bar">
+        <span>نمایش نتایج:</span>
+        <button type="button" id="view-cloud-btn" class="btn btn-primary btn-sm view-toggle-btn active">ابر واژگان</button>
+        <button type="button" id="view-tile-btn" class="btn btn-secondary btn-sm view-toggle-btn">حالت تایل</button>
+      </div>
+
+      <div class="card wordcloud-card" id="cloud-view">
         <h2>ابر واژگان</h2>
         <div class="wordcloud-canvas-wrap">
           <canvas id="wordcloud-canvas"></canvas>
         </div>
-        <p id="no-data" class="hidden" style="color:var(--text-muted);padding:2rem">هنوز پاسخی ثبت نشده است.</p>
+        <p id="no-data-cloud" class="hidden" style="color:var(--text-muted);padding:2rem">هنوز پاسخی ثبت نشده است.</p>
+      </div>
+
+      <div class="card hidden" id="tile-view">
+        <h2>نمایش تایل</h2>
+        <div id="word-tiles" class="word-tiles"></div>
+        <p id="no-data-tile" class="hidden" style="color:var(--text-muted);padding:2rem">هنوز پاسخی ثبت نشده است.</p>
       </div>
 
       <div class="card">
@@ -108,12 +122,14 @@
     const dashboard = document.getElementById('dashboard');
     const alertBox = document.getElementById('alert-box');
     const questionFilter = document.getElementById('question-filter');
+    const surveyFilter = document.getElementById('survey-filter');
     let allResponses = [];
     let allQuestions = [];
+    let allSurveys = [];
     let currentWordList = [];
+    let currentSurveyId = null;
+    let viewMode = 'cloud';
     let client;
-
-    const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
 
     function isLoggedIn() {
       return sessionStorage.getItem('admin_logged_in') === 'true';
@@ -147,26 +163,72 @@
       loading.classList.remove('hidden');
       try {
         client = getSupabaseClient();
-        allQuestions = await fetchActiveQuestions(client);
-        allResponses = await fetchResponses(client);
+        allSurveys = await fetchAllSurveys(client);
+
+        surveyFilter.innerHTML = '';
+        allSurveys.forEach((s) => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.title;
+          surveyFilter.appendChild(opt);
+        });
+
+        if (allSurveys.length === 0) {
+          loading.classList.add('hidden');
+          showAlert(alertBox, 'هنوز پرسشنامه‌ای تعریف نشده است.', 'error');
+          return;
+        }
+
+        currentSurveyId = allSurveys[0].id;
+        surveyFilter.value = currentSurveyId;
+        await reloadSurveyData();
 
         loading.classList.add('hidden');
         dashboard.classList.remove('hidden');
-
-        allQuestions.forEach((q) => {
-          const opt = document.createElement('option');
-          opt.value = q.id;
-          opt.textContent = q.text.length > 50 ? q.text.slice(0, 50) + '...' : q.text;
-          questionFilter.appendChild(opt);
-        });
-
-        document.getElementById('stat-questions').textContent = allQuestions.length;
         render();
       } catch (err) {
         loading.classList.add('hidden');
         showAlert(alertBox, err.message, 'error');
       }
     }
+
+    async function reloadSurveyData() {
+      allQuestions = await fetchActiveQuestions(client, currentSurveyId);
+      allResponses = await fetchResponses(client, { surveyId: currentSurveyId });
+
+      questionFilter.innerHTML = '<option value="all">همه سوالات</option>';
+      allQuestions.forEach((q) => {
+        const opt = document.createElement('option');
+        opt.value = q.id;
+        opt.textContent = q.text.length > 50 ? q.text.slice(0, 50) + '...' : q.text;
+        questionFilter.appendChild(opt);
+      });
+
+      document.getElementById('stat-questions').textContent = allQuestions.length;
+    }
+
+    function setViewMode(mode) {
+      viewMode = mode;
+      document.getElementById('view-cloud-btn').classList.toggle('active', mode === 'cloud');
+      document.getElementById('view-cloud-btn').classList.toggle('btn-primary', mode === 'cloud');
+      document.getElementById('view-cloud-btn').classList.toggle('btn-secondary', mode !== 'cloud');
+      document.getElementById('view-tile-btn').classList.toggle('active', mode === 'tile');
+      document.getElementById('view-tile-btn').classList.toggle('btn-primary', mode === 'tile');
+      document.getElementById('view-tile-btn').classList.toggle('btn-secondary', mode !== 'tile');
+      document.getElementById('cloud-view').classList.toggle('hidden', mode !== 'cloud');
+      document.getElementById('tile-view').classList.toggle('hidden', mode !== 'tile');
+      render();
+    }
+
+    document.getElementById('view-cloud-btn').addEventListener('click', () => setViewMode('cloud'));
+    document.getElementById('view-tile-btn').addEventListener('click', () => setViewMode('tile'));
+
+    surveyFilter.addEventListener('change', async () => {
+      currentSurveyId = surveyFilter.value;
+      questionFilter.value = 'all';
+      await reloadSurveyData();
+      render();
+    });
 
     function getFilteredResponses() {
       const qId = questionFilter.value;
@@ -184,35 +246,26 @@
       document.getElementById('stat-words').textContent = wordList.length;
 
       const canvas = document.getElementById('wordcloud-canvas');
-      const noData = document.getElementById('no-data');
+      const noDataCloud = document.getElementById('no-data-cloud');
+      const noDataTile = document.getElementById('no-data-tile');
+      const tilesEl = document.getElementById('word-tiles');
 
       if (wordList.length === 0) {
         canvas.classList.add('hidden');
-        noData.classList.remove('hidden');
+        noDataCloud.classList.remove('hidden');
+        tilesEl.innerHTML = '';
+        noDataTile.classList.remove('hidden');
       } else {
-        canvas.classList.remove('hidden');
-        noData.classList.add('hidden');
+        noDataCloud.classList.add('hidden');
+        noDataTile.classList.add('hidden');
 
-        const w = Math.min(window.innerWidth - 80, 900);
-        const longest = Math.max(...wordList.map(([term]) => term.length), 4);
-        const gridSize = longest > 12 ? 4 : longest > 8 ? 5 : 6;
-        const h = Math.max(420, Math.min(600, 280 + wordList.length * 6));
-        canvas.width = w;
-        canvas.height = h;
-        canvas.style.width = `${w}px`;
-        canvas.style.height = `${h}px`;
-
-        WordCloud(canvas, {
-          list: wordList,
-          gridSize,
-          weightFactor: (size) => Math.pow(size, 0.65) * 14,
-          fontFamily: 'Vazirmatn, Tahoma, sans-serif',
-          color: () => COLORS[Math.floor(Math.random() * COLORS.length)],
-          rotateRatio: 0,
-          shrinkToFit: true,
-          backgroundColor: 'transparent',
-          minSize: 12,
-        });
+        if (viewMode === 'cloud') {
+          canvas.classList.remove('hidden');
+          renderWordCloud(canvas, wordList);
+        } else {
+          canvas.classList.add('hidden');
+          renderWordTiles(tilesEl, wordList);
+        }
       }
 
       const topWords = document.getElementById('top-words');
@@ -234,7 +287,7 @@
 
     questionFilter.addEventListener('change', render);
     document.getElementById('refresh-btn').addEventListener('click', async () => {
-      allResponses = await fetchResponses(client);
+      await reloadSurveyData();
       render();
       showAlert(alertBox, 'داده‌ها بروزرسانی شد.', 'success');
     });

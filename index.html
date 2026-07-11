@@ -61,10 +61,29 @@
     async function init() {
       try {
         const client = getSupabaseClient();
-        const settings = await fetchSettings(client);
-        applySurveyHeader(settings);
+        const surveyId = getSurveyIdFromUrl();
 
-        const questions = await fetchActiveQuestions(client);
+        if (!surveyId) {
+          loading.classList.add('hidden');
+          showAlert(alertBox, 'لینک پرسشنامه معتبر نیست. از QR Code یا لینک صحیح استفاده کنید.', 'error');
+          return;
+        }
+
+        const survey = await fetchSurvey(client, surveyId);
+        if (!survey) {
+          loading.classList.add('hidden');
+          showAlert(alertBox, 'پرسشنامه یافت نشد.', 'error');
+          return;
+        }
+
+        if (!survey.active) {
+          loading.classList.add('hidden');
+          showAlert(alertBox, 'این پرسشنامه در حال حاضر غیرفعال است.', 'error');
+          return;
+        }
+
+        applySurveyHeader(survey);
+        const questions = await fetchActiveQuestions(client, surveyId);
 
         loading.classList.add('hidden');
 

@@ -1,8 +1,8 @@
 const COMPANY_NAME = 'هلدینگ پیشران انتخاب';
 const LOGO_PATH = 'assets/logo.png';
 
-function getSurveyUrl() {
-  return new URL('index.html', window.location.href).href;
+function getSurveyUrl(surveyId) {
+  return getSurveyPublicUrl(surveyId);
 }
 
 function renderQRImage(container, url, size = 220) {

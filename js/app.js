@@ -101,34 +101,166 @@ function getSupabaseClient() {
   );
 }
 
-async function fetchActiveQuestions(client) {
+function getSurveyIdFromUrl() {
+  return new URLSearchParams(window.location.search).get('id');
+}
+
+function getSurveyPublicUrl(surveyId) {
+  const url = new URL('index.html', window.location.href);
+  if (surveyId) url.searchParams.set('id', surveyId);
+  return url.href;
+}
+
+async function fetchAllSurveys(client) {
   const { data, error } = await client
+    .from('surveys')
+    .select('*')
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchSurvey(client, surveyId) {
+  const { data, error } = await client
+    .from('surveys')
+    .select('*')
+    .eq('id', surveyId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function createSurvey(client, survey) {
+  const all = await fetchAllSurveys(client);
+  const { data, error } = await client
+    .from('surveys')
+    .insert({
+      ...survey,
+      sort_order: all.length,
+      active: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function updateSurvey(client, surveyId, updates) {
+  const { error } = await client
+    .from('surveys')
+    .update(updates)
+    .eq('id', surveyId);
+
+  if (error) throw error;
+}
+
+async function deleteSurvey(client, surveyId) {
+  const { error } = await client.from('surveys').delete().eq('id', surveyId);
+  if (error) throw error;
+}
+
+async function fetchActiveQuestions(client, surveyId = null) {
+  let query = client
     .from('questions')
     .select('*')
     .eq('active', true)
     .order('sort_order', { ascending: true });
 
+  if (surveyId) query = query.eq('survey_id', surveyId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
-async function fetchAllQuestions(client) {
-  const { data, error } = await client
+async function fetchAllQuestions(client, surveyId = null) {
+  let query = client
     .from('questions')
     .select('*')
     .order('sort_order', { ascending: true });
 
+  if (surveyId) query = query.eq('survey_id', surveyId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }
 
-async function fetchResponses(client, questionId = null) {
-  let query = client.from('responses').select('*, questions(text)');
+async function fetchResponses(client, options = {}) {
+  const { surveyId = null, questionId = null } = options;
+  let query = client.from('responses').select('*, questions(text, survey_id)');
   if (questionId) query = query.eq('question_id', questionId);
 
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+
+  let responses = data || [];
+  if (surveyId) {
+    responses = responses.filter((r) => r.questions?.survey_id === surveyId);
+  }
+  return responses;
+}
+
+async function clearSurveyResponses(client, surveyId) {
+  const questions = await fetchAllQuestions(client, surveyId);
+  const ids = questions.map((q) => q.id);
+  if (!ids.length) return;
+
+  const { error } = await client.from('responses').delete().in('question_id', ids);
+  if (error) throw error;
+}
+
+async function clearSurveyQuestions(client, surveyId) {
+  const { error } = await client.from('questions').delete().eq('survey_id', surveyId);
+  if (error) throw error;
+}
+
+const TILE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
+
+function renderWordTiles(container, wordList) {
+  if (!wordList.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const max = wordList[0][1] || 1;
+  container.innerHTML = wordList.map(([term, count], i) => {
+    const ratio = count / max;
+    const fontSize = Math.round(13 + ratio * 18);
+    const color = TILE_COLORS[i % TILE_COLORS.length];
+    return `
+      <div class="word-tile" style="--tile-color:${color};--tile-size:${fontSize}px">
+        <span class="word-tile-text">${escapeHtml(term)}</span>
+        <span class="word-tile-count">${count}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderWordCloud(canvas, wordList, colors = TILE_COLORS) {
+  const w = Math.min(window.innerWidth - 80, 900);
+  const longest = Math.max(...wordList.map(([term]) => term.length), 4);
+  const gridSize = longest > 12 ? 4 : longest > 8 ? 5 : 6;
+  const h = Math.max(420, Math.min(600, 280 + wordList.length * 6));
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+
+  WordCloud(canvas, {
+    list: wordList,
+    gridSize,
+    weightFactor: (size) => Math.pow(size, 0.65) * 14,
+    fontFamily: 'Vazirmatn, Tahoma, sans-serif',
+    color: () => colors[Math.floor(Math.random() * colors.length)],
+    rotateRatio: 0,
+    shrinkToFit: true,
+    backgroundColor: 'transparent',
+    minSize: 12,
+  });
 }
 
 const DEFAULT_SETTINGS = {
@@ -238,12 +370,13 @@ function collectSurveyAnswers(form) {
   return entries;
 }
 
-async function uploadSurveyImage(client, file) {
+async function uploadSurveyImage(client, file, surveyId = null) {
   if (!file.type.startsWith('image/')) throw new Error('فقط فایل تصویری مجاز است');
   if (file.size > 2 * 1024 * 1024) throw new Error('حداکثر حجم تصویر ۲ مگابایت است');
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const fileName = `banner-${Date.now()}.${ext}`;
+  const prefix = surveyId ? `${surveyId}-` : '';
+  const fileName = `${prefix}banner-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await client.storage
     .from('survey-images')
@@ -266,9 +399,11 @@ async function removeSurveyImage(client, imageUrl) {
   await client.storage.from('survey-images').remove([filePath]);
 }
 
-function applySurveyHeader(settings) {
-  const title = settings.survey_title || DEFAULT_SETTINGS.survey_title;
-  const subtitle = settings.survey_subtitle || DEFAULT_SETTINGS.survey_subtitle;
+function applySurveyHeader(survey) {
+  const title = survey?.title || DEFAULT_SETTINGS.survey_title;
+  const subtitle = survey?.subtitle || DEFAULT_SETTINGS.survey_subtitle;
+  const description = (survey?.description || '').trim();
+  const imageUrl = survey?.image_url || '';
 
   const titleEl = document.getElementById('survey-title');
   const subtitleEl = document.getElementById('survey-subtitle');
@@ -278,21 +413,19 @@ function applySurveyHeader(settings) {
 
   const bannerWrap = document.getElementById('survey-banner-wrap');
   const bannerImg = document.getElementById('survey-banner');
-  const imageUrl = settings.survey_image_url || '';
 
-  if (!bannerWrap || !bannerImg) return;
-
-  if (imageUrl) {
-    bannerImg.src = imageUrl;
-    bannerWrap.classList.remove('hidden');
-  } else {
-    bannerImg.removeAttribute('src');
-    bannerWrap.classList.add('hidden');
+  if (bannerWrap && bannerImg) {
+    if (imageUrl) {
+      bannerImg.src = imageUrl;
+      bannerWrap.classList.remove('hidden');
+    } else {
+      bannerImg.removeAttribute('src');
+      bannerWrap.classList.add('hidden');
+    }
   }
 
   const descWrap = document.getElementById('survey-description-wrap');
   const descEl = document.getElementById('survey-description');
-  const description = (settings.survey_description || '').trim();
 
   if (descWrap && descEl) {
     if (description) {
@@ -303,6 +436,15 @@ function applySurveyHeader(settings) {
       descWrap.classList.add('hidden');
     }
   }
+}
+
+function surveyFromLegacySettings(settings) {
+  return {
+    title: settings.survey_title,
+    subtitle: settings.survey_subtitle,
+    description: settings.survey_description,
+    image_url: settings.survey_image_url,
+  };
 }
 
 async function fetchSettings(client) {
@@ -343,6 +485,7 @@ async function clearAllQuestions(client) {
   if (error) throw error;
 }
 
+// clearSurveyResponses و clearSurveyQuestions در بالا تعریف شده‌اند
 function downloadFile(filename, content, mimeType = 'text/plain;charset=utf-8') {
   const blob = new Blob(['\uFEFF', content], { type: mimeType });
   const url = URL.createObjectURL(blob);
